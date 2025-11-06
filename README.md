@@ -1,9 +1,9 @@
 Enterprise Network with Security & VLANs
-📋 Project Overview
+ Project Overview
 Objective: Design and implement a complete enterprise network with multiple departments, security policies, NAT, ACLs, VLANs, and internet connectivity.
 Difficulty: Advanced
 Completion Date: January 2025
-🎯 Technologies Implemented
+ Technologies Implemented
 
 ✅ VLANs - Network segmentation (VLAN 10, 20, 30, 100)
 ✅ Subnetting - VLSM for efficient IP address allocation
@@ -14,7 +14,7 @@ Completion Date: January 2025
 ✅ DMZ - Demilitarized zone for public servers
 ✅ Internet Routing - Default gateway and ISP connectivity
 
-🏗️ Network Topology
+Network Topology
 
 Network Architecture
 Three-Tier Design:
