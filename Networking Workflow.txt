@@ -1,1 +1,196 @@
+Edge Layer - Router0 (ISP), Router1 (Firewall/NAT)
+Distribution Layer - Router1 (Inter-VLAN routing)
+Access Layer - Department switches (HR, Finance, IT)
 
+Department Segmentation
+
+VLAN 10 (HR) - Yellow zone - Human Resources
+VLAN 20 (IT) - Pink zone - Information Technology
+VLAN 30 (Finance) - Orange zone - Finance Department
+VLAN 100 (DMZ) - Blue zone - Public Servers (Web, Mail)
+
+📊 IP Addressing Scheme
+Subnetting Plan (VLSM)
+VLANDepartmentNetworkSubnet MaskUsable IPsGatewayHosts10HR10.0.0.0/27255.255.255.22410.0.0.1-3010.0.0.12 PCs20IT10.0.0.32/27255.255.255.22410.0.0.33-6210.0.0.332 PCs30Finance10.0.0.64/27255.255.255.22410.0.0.65-9410.0.0.652 PCs100DMZ192.168.100.0/24255.255.255.0192.168.100.1-254192.168.100.12 Servers
+Router Interfaces
+Router1 (Gateway/Firewall):
+
+G0/0.10 - 10.0.0.1/27 (HR VLAN)
+G0/0.20 - 10.0.0.33/27 (IT VLAN)
+G0/0.30 - 10.0.0.65/27 (Finance VLAN)
+G0/1 - DMZ Interface
+G0/2 - WAN Interface to Router0
+
+Router0 (ISP):
+
+Public IP connectivity to cloud
+
+🔧 Configuration Details
+1. VLAN Configuration
+On HR Switch (2960-24TT):
+ciscoSwitch> enable
+Switch# configure terminal
+Switch(config)# hostname HR-Switch
+
+! Create VLAN 10
+Switch(config)# vlan 10
+Switch(config-vlan)# name HR-Department
+Switch(config-vlan)# exit
+
+! Assign access ports to VLAN 10
+Switch(config)# interface range fastEthernet 0/1-2
+Switch(config-if-range)# switchport mode access
+Switch(config-if-range)# switchport access vlan 10
+Switch(config-if-range)# spanning-tree portfast
+Switch(config-if-range)# spanning-tree bpduguard enable
+Switch(config-if-range)# exit
+
+! Configure trunk to router
+Switch(config)# interface gigabitEthernet 0/1
+Switch(config-if)# switchport mode trunk
+Switch(config-if)# switchport trunk allowed vlan 10
+Switch(config-if)# exit
+Similar configuration for Finance (VLAN 30) and IT (VLAN 20) switches
+2. Router-on-a-Stick (Inter-VLAN Routing)
+On Router1:
+ciscoRouter> enable
+Router# configure terminal
+Router(config)# hostname Router1
+
+! Configure sub-interfaces for each VLAN
+Router(config)# interface gigabitEthernet 0/0
+Router(config-if)# no shutdown
+Router(config-if)# exit
+
+! VLAN 10 - HR
+Router(config)# interface gigabitEthernet 0/0.10
+Router(config-subif)# encapsulation dot1Q 10
+Router(config-subif)# ip address 10.0.0.1 255.255.255.224
+Router(config-subif)# exit
+
+! VLAN 20 - IT
+Router(config)# interface gigabitEthernet 0/0.20
+Router(config-subif)# encapsulation dot1Q 20
+Router(config-subif)# ip address 10.0.0.33 255.255.255.224
+Router(config-subif)# exit
+
+! VLAN 30 - Finance
+Router(config)# interface gigabitEthernet 0/0.30
+Router(config-subif)# encapsulation dot1Q 30
+Router(config-subif)# ip address 10.0.0.65 255.255.255.224
+Router(config-subif)# exit
+
+! DMZ Interface
+Router(config)# interface gigabitEthernet 0/1
+Router(config-if)# ip address 192.168.100.1 255.255.255.0
+Router(config-if)# no shutdown
+Router(config-if)# exit
+3. NAT Configuration
+On Router1 (NAT overload/PAT):
+cisco! Define inside interfaces
+Router(config)# interface gigabitEthernet 0/0.10
+Router(config-subif)# ip nat inside
+Router(config-subif)# exit
+
+Router(config)# interface gigabitEthernet 0/0.20
+Router(config-subif)# ip nat inside
+Router(config-subif)# exit
+
+Router(config)# interface gigabitEthernet 0/0.30
+Router(config-subif)# ip nat inside
+Router(config-subif)# exit
+
+! Define outside interface (to Router0/Internet)
+Router(config)# interface gigabitEthernet 0/2
+Router(config-if)# ip nat outside
+Router(config-if)# exit
+
+! Create access list for NAT
+Router(config)# access-list 1 permit 10.0.0.0 0.0.0.127
+Router(config)# access-list 1 permit 192.168.100.0 0.0.0.255
+
+! Configure NAT overload
+Router(config)# ip nat inside source list 1 interface gigabitEthernet 0/2 overload
+4. Access Control Lists (ACLs)
+Security Policies:
+
+HR can access Finance (for payroll)
+Finance cannot access HR or IT
+IT can access all departments
+DMZ servers accessible from all departments
+Block all other traffic
+
+On Router1:
+cisco! ACL for HR VLAN (allow to Finance and DMZ)
+Router(config)# ip access-list extended HR-ACL
+Router(config-ext-nacl)# permit ip 10.0.0.0 0.0.0.31 10.0.0.64 0.0.0.31
+Router(config-ext-nacl)# permit ip 10.0.0.0 0.0.0.31 192.168.100.0 0.0.0.255
+Router(config-ext-nacl)# permit ip 10.0.0.0 0.0.0.31 any
+Router(config-ext-nacl)# deny ip 10.0.0.0 0.0.0.31 10.0.0.32 0.0.0.31
+Router(config-ext-nacl)# exit
+
+! ACL for Finance VLAN (isolated, only DMZ and Internet)
+Router(config)# ip access-list extended Finance-ACL
+Router(config-ext-nacl)# permit ip 10.0.0.64 0.0.0.31 192.168.100.0 0.0.0.255
+Router(config-ext-nacl)# permit ip 10.0.0.64 0.0.0.31 any
+Router(config-ext-nacl)# deny ip 10.0.0.64 0.0.0.31 10.0.0.0 0.0.0.127
+Router(config-ext-nacl)# exit
+
+! ACL for IT VLAN (access to everything)
+Router(config)# ip access-list extended IT-ACL
+Router(config-ext-nacl)# permit ip 10.0.0.32 0.0.0.31 any
+Router(config-ext-nacl)# exit
+
+! Apply ACLs to interfaces
+Router(config)# interface gigabitEthernet 0/0.10
+Router(config-subif)# ip access-group HR-ACL in
+Router(config-subif)# exit
+
+Router(config)# interface gigabitEthernet 0/0.30
+Router(config-subif)# ip access-group Finance-ACL in
+Router(config-subif)# exit
+
+Router(config)# interface gigabitEthernet 0/0.20
+Router(config-subif)# ip access-group IT-ACL in
+Router(config-subif)# exit
+5. Spanning Tree Protocol
+On all switches:
+cisco! Enable Rapid PVST+
+Switch(config)# spanning-tree mode rapid-pvst
+
+! Configure PortFast on access ports (HR example)
+Switch(config)# interface range fastEthernet 0/1-2
+Switch(config-if-range)# spanning-tree portfast
+Switch(config-if-range)# spanning-tree bpduguard enable
+Switch(config-if-range)# exit
+
+! Verify STP
+Switch# show spanning-tree
+Switch# show spanning-tree interface fastEthernet 0/1
+6. Default Routing to Internet
+On Router1:
+cisco! Default route to Router0 (ISP)
+Router(config)# ip route 0.0.0.0 0.0.0.0 [Router0-IP]
+ 
+
+
+Verification Commands
+
+VLAN Verification
+ciscoSwitch# show vlan brief
+Switch# show interfaces trunk
+Switch# show interfaces fastEthernet 0/1 switchport
+NAT Verification
+ciscoRouter# show ip nat translations
+Router# show ip nat statistics
+ACL Verification
+ciscoRouter# show access-lists
+Router# show ip interface gigabitEthernet 0/0.10
+STP Verification
+ciscoSwitch# show spanning-tree
+Switch# show spanning-tree summary
+Switch# show spanning-tree interface fastEthernet 0/1
+Routing Verification
+ciscoRouter# show ip route
+Router# show ip interface brief
+ 
